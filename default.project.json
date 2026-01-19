@@ -22,7 +22,7 @@
     },
     "ReplicatedStorage": {
       "$className": "ReplicatedStorage",
-      "Shared": {
+      "shared": {
         "$path": "src/shared"
       }
     }

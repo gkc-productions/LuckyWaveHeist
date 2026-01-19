@@ -1,18 +1,13 @@
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RoundService = require(script.Parent:WaitForChild("RoundService"))
+local WaterRise = require(script.Parent:WaitForChild("WaterRise"))
 
--- Wait for shared modules to load
-local shared = ReplicatedStorage:WaitForChild("shared")
-shared:WaitForChild("RoundStates")
-shared:WaitForChild("Constants")
-shared:WaitForChild("RemoteEvents")
+-- Wait for shared modules
+game.ReplicatedStorage:WaitForChild("shared"):WaitForChild("Remotes")
 
--- Require managers
-local PlayerManager = require(script.Parent:WaitForChild("PlayerManager"))
-local RoundManager = require(script.Parent:WaitForChild("RoundManager"))
+print("[Init] Starting Lucky Wave Heist...")
 
--- Initialize systems
-PlayerManager.Init()
-RoundManager.Init(PlayerManager)
+-- Initialize both services
+RoundService.Init()
+WaterRise.Init()
 
-print("[Server] Lucky Wave Heist started - Milestone 1")
+print("[Init] All services started!")
