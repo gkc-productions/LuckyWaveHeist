@@ -1,8 +1,6 @@
--- src/shared/Remotes.lua
--- Creates/returns RemoteEvents used by both server and client.
-
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+-- Folder to hold RemoteEvents
 local folder = ReplicatedStorage:FindFirstChild("Remotes")
 if not folder then
 	folder = Instance.new("Folder")
@@ -21,5 +19,5 @@ local function getOrCreateRemote(name: string)
 end
 
 return {
-	RoundUpdate = getOrCreateRemote("RoundUpdate"), -- server -> client: state/time
+	RoundUpdate = getOrCreateRemote("RoundUpdate"),
 }
