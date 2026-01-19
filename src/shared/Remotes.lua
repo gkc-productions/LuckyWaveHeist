@@ -1,37 +1,25 @@
+-- src/shared/Remotes.lua
+-- Creates/returns RemoteEvents used by both server and client.
+
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
--- Create Events folder if it doesn't exist
-if not ReplicatedStorage:FindFirstChild("Events") then
-    Instance.new("Folder", ReplicatedStorage).Name = "Events"
+local folder = ReplicatedStorage:FindFirstChild("Remotes")
+if not folder then
+	folder = Instance.new("Folder")
+	folder.Name = "Remotes"
+	folder.Parent = ReplicatedStorage
 end
 
-local Events = ReplicatedStorage:WaitForChild("Events")
+local function getOrCreateRemote(name: string)
+	local r = folder:FindFirstChild(name)
+	if not r then
+		r = Instance.new("RemoteEvent")
+		r.Name = name
+		r.Parent = folder
+	end
+	return r
+end
 
--- Define all remote events
-local Remotes = {}
-
-Remotes.WaveStarted = Instance.new("RemoteEvent")
-Remotes.WaveStarted.Name = "WaveStarted"
-Remotes.WaveStarted.Parent = Events
-
-Remotes.WaveEnded = Instance.new("RemoteEvent")
-Remotes.WaveEnded.Name = "WaveEnded"
-Remotes.WaveEnded.Parent = Events
-
-Remotes.TimerTick = Instance.new("RemoteEvent")
-Remotes.TimerTick.Name = "TimerTick"
-Remotes.TimerTick.Parent = Events
-
-Remotes.WaveDefeat = Instance.new("RemoteEvent")
-Remotes.WaveDefeat.Name = "WaveDefeat"
-Remotes.WaveDefeat.Parent = Events
-
-Remotes.WaveVictory = Instance.new("RemoteEvent")
-Remotes.WaveVictory.Name = "WaveVictory"
-Remotes.WaveVictory.Parent = Events
-
-Remotes.PlayerDied = Instance.new("RemoteEvent")
-Remotes.PlayerDied.Name = "PlayerDied"
-Remotes.PlayerDied.Parent = Events
-
-return Remotes
+return {
+	RoundUpdate = getOrCreateRemote("RoundUpdate"), -- server -> client: state/time
+}
