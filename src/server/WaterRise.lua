@@ -51,7 +51,7 @@ function WaterRise:_onTouched(hit)
 		end
 		local shieldHp = player:GetAttribute("ShieldHP")
 		if shieldHp and shieldHp > 0 then
-			player:SetAttribute("ShieldHP", 0)
+			player:SetAttribute("ShieldHP", shieldHp - 1)
 			return
 		end
 		local revive = player:GetAttribute("ReviveToken")

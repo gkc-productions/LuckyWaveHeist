@@ -8,7 +8,7 @@ local TsunamiService = require(script.Parent:WaitForChild("TsunamiService"))
 local LuckyBlocksService = require(script.Parent:WaitForChild("LuckyBlocksService"))
 local CurrencyService = require(script.Parent:WaitForChild("CurrencyService"))
 
-local preset = Content.Presets.Casual
+local tuning = Content.Tuning
 
 local spawns = workspace:WaitForChild("Spawns")
 local lobbyFolder = spawns:WaitForChild("Lobby")
@@ -16,11 +16,10 @@ local arenaFolder = spawns:WaitForChild("Arena")
 
 local water = WaterRise.new()
 local currency = CurrencyService.new(Remotes)
-local tsunami = TsunamiService.new(Remotes, "Casual")
+local tsunami = TsunamiService.new(Remotes)
 local luckyBlocks = LuckyBlocksService.new(Remotes, currency, tsunami)
 
 local roundActive = false
-local roundIndex = 1
 
 local function pickSpawn(folder)
 	local kids = folder:GetChildren()
@@ -86,7 +85,7 @@ local function broadcast(state, timeLeft, waveNumber)
 		timeLeft = timeLeft,
 		alive = aliveCount(),
 		wave = waveNumber,
-		totalWaves = #preset.WaveDurations,
+		totalWaves = #tuning.WaveDurations,
 	})
 end
 
@@ -117,7 +116,7 @@ end)
 
 local function intermission()
 	roundActive = false
-	local timeLeft = preset.IntermissionSeconds
+	local timeLeft = tuning.IntermissionSeconds
 	teleportAll(lobbyFolder)
 	while timeLeft > 0 do
 		broadcast("Intermission", timeLeft, 1)
@@ -126,12 +125,20 @@ local function intermission()
 	end
 end
 
-local function runWave(waveNumber)
-	local duration = preset.WaveDurations[waveNumber]
-	local baseSpeed = preset.WaveSpeeds[waveNumber]
+local function blockCountForWave(waveNumber)
+	if waveNumber == 1 then
+		return math.random(15, 20)
+	elseif waveNumber == 2 then
+		return math.random(10, 15)
+	end
+	return math.random(5, 8)
+end
 
-	-- Warning phase
-	local warning = preset.WarningSeconds
+local function runWave(waveNumber)
+	local duration = tuning.WaveDurations[waveNumber]
+	local riseRate = tuning.WaveRiseRates[waveNumber]
+
+	local warning = tuning.WarningSeconds
 	tsunami:Warn()
 	while warning > 0 do
 		broadcast("Warning", warning, waveNumber)
@@ -141,17 +148,16 @@ local function runWave(waveNumber)
 
 	roundActive = true
 	teleportAll(arenaFolder)
-	luckyBlocks:SpawnBlocks(Content.LuckyBlock.SpawnCount, Content.Shop.BreakSpeed.baseHold)
+	currency:resetRoundStats(Players:GetPlayers())
+	currency:applyWalletBonus(Players:GetPlayers())
+	luckyBlocks:SpawnBlocks(blockCountForWave(waveNumber))
 	currency:startPerSecondLoop(function()
 		return roundActive
 	end)
-	if waveNumber == 1 then
-		currency:applyWalletBonus(Players:GetPlayers())
-	end
 
-	tsunami:Reset(roundIndex)
-	water:Reset(CFrame.new(0, preset.WaterStartY, 0))
-	tsunami:Start(baseSpeed)
+	tsunami:Reset()
+	water:Reset(CFrame.new(0, tuning.WaterStartY, 0))
+	tsunami:StartWave(duration, riseRate)
 
 	local waveMessage = Content.RoundText.Wave1
 	if waveNumber == 2 then
@@ -163,18 +169,11 @@ local function runWave(waveNumber)
 	print(('[Round] start wave %d'):format(waveNumber))
 
 	local timeLeft = duration
-	local last = os.clock()
 	while timeLeft > 0 and roundActive do
-		local now = os.clock()
-		local dt = now - last
-		last = now
-
 		if aliveCount() == 0 then
 			roundActive = false
 			break
 		end
-
-		tsunami:Step(dt)
 		broadcast("Wave", timeLeft, waveNumber)
 		task.wait(1)
 		timeLeft -= 1
@@ -182,12 +181,12 @@ local function runWave(waveNumber)
 
 	roundActive = false
 	currency:stopPerSecondLoop()
+	currency:clearTempMultipliers()
 	tsunami:Stop()
 	luckyBlocks:Clear()
 
 	if aliveCount() > 0 then
-		local bonus = currency:awardSurvival(alivePlayers(), waveNumber)
-		Remotes.Toast:FireAllClients({message = ("Wave %d complete! +%d coins"):format(waveNumber, bonus)})
+		currency:awardWaveBonus(alivePlayers(), waveNumber)
 		return true
 	end
 
@@ -200,7 +199,7 @@ math.randomseed(os.clock() * 1000000)
 while true do
 	intermission()
 	local success = true
-	for waveNumber = 1, #preset.WaveDurations do
+	for waveNumber = 1, #tuning.WaveDurations do
 		if not runWave(waveNumber) then
 			success = false
 			break
@@ -211,6 +210,4 @@ while true do
 	if success then
 		Remotes.Toast:FireAllClients({message = Content.RoundText.Victory})
 	end
-
-	roundIndex += 1
 end

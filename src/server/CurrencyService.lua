@@ -8,82 +8,69 @@ local Content = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("C
 local CurrencyService = {}
 CurrencyService.__index = CurrencyService
 
-local STORE_NAME = "LWH_Currency_v3"
+local STORE_NAME = "LWH_Currency_v4"
 local AUTOSAVE_INTERVAL = 60
-local STUDIO_MODE = RunService:IsStudio() -- Disable DataStore in Studio
 
 function CurrencyService.new(remotes)
 	local self = setmetatable({}, CurrencyService)
 	self.remotes = remotes
-	self.store = not STUDIO_MODE and DataStoreService:GetDataStore(STORE_NAME) or nil
+	self.store = DataStoreService:GetDataStore(STORE_NAME)
 	self.coins = {}
 	self.upgrades = {}
-	self.lastPrint = {}
+	self.blockStats = {}
+	self.rareStats = {}
 	self.multiplier = {}
 	self.running = true
+	self.perSecond = false
 	self:_startAutosave()
 	return self
 end
 
-local function getCost(def, level)
-	return def.costs[level] or math.huge
-end
-
-function CurrencyService:getUpgradeLevel(player, name)
-	local data = self.upgrades[player]
-	return data and data[name] or 0
-end
-
-function CurrencyService:getUpgradeCost(player, name)
-	local def = Content.Shop[name]
-	if not def then return math.huge end
-	local level = self:getUpgradeLevel(player, name)
-	if level >= def.max then
-		return math.huge
-	end
-	return getCost(def, level + 1)
+local function emptyUpgrades()
+	return {
+		LootMagnet = false,
+		WalletExpansion = false,
+		NimbleFeet = false,
+		HighJumper = false,
+		BreakEfficiency = false,
+		DailyReroll = false,
+	}
 end
 
 function CurrencyService:_send(player)
 	self.remotes.CurrencyUpdate:FireClient(player, {
 		coins = self.coins[player] or 0,
-		upgrades = self.upgrades[player] or {},
+		upgrades = self.upgrades[player] or emptyUpgrades(),
 	})
-
-	local now = os.clock()
-	local last = self.lastPrint[player] or 0
-	if now - last > 12 then
-		self.lastPrint[player] = now
-		print(('[Currency] %s -> %d coins'):format(player.Name, self.coins[player] or 0))
-	end
 end
 
 function CurrencyService:_load(player)
-	if not self.store then
-		-- Studio mode: start with fresh data
+	if RunService:IsStudio() then
 		self.coins[player] = 0
-		self.upgrades[player] = {}
+		self.upgrades[player] = emptyUpgrades()
 		self:_send(player)
 		return
 	end
+
 	local ok, data = pcall(function()
 		return self.store:GetAsync("p_" .. player.UserId)
 	end)
 	if ok and data then
 		self.coins[player] = data.coins or 0
-		self.upgrades[player] = data.upgrades or {}
+		self.upgrades[player] = data.upgrades or emptyUpgrades()
 	else
 		self.coins[player] = 0
-		self.upgrades[player] = {}
+		self.upgrades[player] = emptyUpgrades()
 	end
 	self:_send(player)
 end
 
 function CurrencyService:_save(player)
-	if not player or not player.Parent or not self.store then return end
+	if not player or not player.Parent then return end
+	if RunService:IsStudio() then return end
 	local data = {
 		coins = self.coins[player] or 0,
-		upgrades = self.upgrades[player] or {},
+		upgrades = self.upgrades[player] or emptyUpgrades(),
 	}
 	pcall(function()
 		self.store:SetAsync("p_" .. player.UserId, data)
@@ -112,8 +99,14 @@ function CurrencyService:onPlayerRemoving(player)
 	self:_save(player)
 	self.coins[player] = nil
 	self.upgrades[player] = nil
-	self.lastPrint[player] = nil
+	self.blockStats[player] = nil
+	self.rareStats[player] = nil
 	self.multiplier[player] = nil
+end
+
+function CurrencyService:hasUpgrade(player, name)
+	local data = self.upgrades[player]
+	return data and data[name] or false
 end
 
 function CurrencyService:addCoins(player, amount)
@@ -123,30 +116,50 @@ function CurrencyService:addCoins(player, amount)
 	self:_send(player)
 end
 
-function CurrencyService:setCoinMultiplier(player, mult, duration)
+function CurrencyService:setCoinMultiplier(player, mult)
 	self.multiplier[player] = mult
-	player:SetAttribute("CoinMultiplierUntil", os.clock() + duration)
-	task.delay(duration, function()
-		if player and player.Parent then
-			self.multiplier[player] = 1
-		end
-	end)
 end
 
-function CurrencyService:awardSurvival(playersList, waveNumber)
-	local bonus = Content.Economy.SurvivalBonusPerWave * waveNumber
-	for _, plr in ipairs(playersList) do
-		self:addCoins(plr, bonus)
+function CurrencyService:clearTempMultipliers()
+	for player in pairs(self.multiplier) do
+		self.multiplier[player] = 1
 	end
-	return bonus
+end
+
+function CurrencyService:resetRoundStats(playersList)
+	for _, plr in ipairs(playersList) do
+		self.blockStats[plr] = 0
+		self.rareStats[plr] = 0
+		self.multiplier[plr] = 1
+		if self:hasUpgrade(plr, "DailyReroll") then
+			plr:SetAttribute("RerollToken", true)
+		end
+	end
+end
+
+function CurrencyService:recordBlockBreak(player, rarity)
+	self.blockStats[player] = (self.blockStats[player] or 0) + 1
+	if rarity == "Rare" or rarity == "Epic" then
+		self.rareStats[player] = (self.rareStats[player] or 0) + 1
+	end
+end
+
+function CurrencyService:awardWaveBonus(playersList, waveNumber)
+	local base = Content.Economy.BaseSurvivalBonus
+	local waveBonus = Content.Economy.WaveClearBonus * waveNumber
+	for _, plr in ipairs(playersList) do
+		local blocks = self.blockStats[plr] or 0
+		local rares = self.rareStats[plr] or 0
+		local total = base + (blocks * Content.Economy.BlockBreakBonus) + waveBonus + (rares * Content.Economy.RareItemBonus)
+		self:addCoins(plr, total)
+		self.remotes.Toast:FireClient(plr, {message = ("Wave bonus +%d"):format(total)})
+	end
 end
 
 function CurrencyService:applyWalletBonus(playersList)
-	local def = Content.Shop.WalletExpansion
 	for _, plr in ipairs(playersList) do
-		local level = self:getUpgradeLevel(plr, "WalletExpansion")
-		if level > 0 then
-			self:addCoins(plr, def.bonusPerLevel * level)
+		if self:hasUpgrade(plr, "WalletExpansion") then
+			self:addCoins(plr, Content.Shop.WalletExpansion.bonus)
 		end
 	end
 end
@@ -154,15 +167,20 @@ end
 function CurrencyService:applyMovementUpgrades(player, character)
 	local hum = character:FindFirstChildOfClass("Humanoid")
 	if not hum then return end
-	local speedDef = Content.Shop.WalkSpeed
-	local jumpDef = Content.Shop.JumpPower
-	local speedLevel = self:getUpgradeLevel(player, "WalkSpeed")
-	local jumpLevel = self:getUpgradeLevel(player, "JumpPower")
-	hum.WalkSpeed = speedDef.base + (speedLevel * speedDef.perLevel)
-	hum.JumpPower = jumpDef.base + (jumpLevel * jumpDef.perLevel)
+	local speed = hum.WalkSpeed
+	local jump = hum.JumpPower
+	if self:hasUpgrade(player, "NimbleFeet") then
+		speed = speed * (1 + Content.Shop.NimbleFeet.speedPct)
+	end
+	if self:hasUpgrade(player, "HighJumper") then
+		jump = jump * (1 + Content.Shop.HighJumper.jumpPct)
+	end
+	hum.WalkSpeed = speed
+	hum.JumpPower = jump
 end
 
 function CurrencyService:startPerSecondLoop(isRoundActive)
+	if self.perSecond then return end
 	self.perSecond = true
 	task.spawn(function()
 		while self.perSecond and isRoundActive() do
@@ -187,22 +205,21 @@ function CurrencyService:purchase(player, upgradeName)
 		self.remotes.Toast:FireClient(player, {message = "Unknown upgrade"})
 		return
 	end
-	local level = self:getUpgradeLevel(player, upgradeName)
-	if level >= def.max then
-		self.remotes.Toast:FireClient(player, {message = "Max level reached"})
+	if self:hasUpgrade(player, upgradeName) then
+		self.remotes.Toast:FireClient(player, {message = "Already owned"})
 		return
 	end
-	local cost = self:getUpgradeCost(player, upgradeName)
+	local cost = def.cost
 	if (self.coins[player] or 0) < cost then
 		self.remotes.Toast:FireClient(player, {message = "Not enough coins"})
 		return
 	end
 	self.coins[player] -= cost
-	self.upgrades[player][upgradeName] = level + 1
+	self.upgrades[player][upgradeName] = true
 	self:_send(player)
 	self.remotes.Toast:FireClient(player, {message = "Purchase successful"})
 
-	if upgradeName == "WalkSpeed" or upgradeName == "JumpPower" then
+	if upgradeName == "NimbleFeet" or upgradeName == "HighJumper" then
 		local char = player.Character
 		if char then
 			self:applyMovementUpgrades(player, char)

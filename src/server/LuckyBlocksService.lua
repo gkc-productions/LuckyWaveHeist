@@ -7,27 +7,27 @@ local Content = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("C
 local LuckyBlocksService = {}
 LuckyBlocksService.__index = LuckyBlocksService
 
-local LootConfig = Content.LuckyBlock
-local Toasts = Content.Toasts
+local LootConfig = Content.Loot
 
-local function chooseItem()
+local function rollRarity()
 	local total = 0
-	for _, entry in ipairs(LootConfig.LootTable) do
-		total += entry.weight
+	for _, weight in pairs(LootConfig.RarityWeights) do
+		total += weight
 	end
 	local roll = math.random() * total
 	local accum = 0
-	for _, entry in ipairs(LootConfig.LootTable) do
-		accum += entry.weight
+	for rarity, weight in pairs(LootConfig.RarityWeights) do
+		accum += weight
 		if roll <= accum then
-			return entry
+			return rarity
 		end
 	end
-	return LootConfig.LootTable[1]
+	return "Common"
 end
 
-local function rarityToast(tier)
-	return Toasts[tier] or Toasts.Common
+local function randomItem(rarity)
+	local list = LootConfig.Items[rarity] or LootConfig.Items.Common
+	return list[math.random(1, #list)]
 end
 
 function LuckyBlocksService.new(remotes, currencyService, tsunamiService)
@@ -41,19 +41,14 @@ function LuckyBlocksService.new(remotes, currencyService, tsunamiService)
 end
 
 function LuckyBlocksService:_getMagnetRadius(player)
-	local def = Content.Shop.LootMagnet
-	local level = 0
-	if self.currency and self.currency.getUpgradeLevel then
-		level = self.currency:getUpgradeLevel(player, "LootMagnet")
-	end
 	local radius = 0
-	if level > 0 then
-		local t = math.min(1, level / def.max)
-		radius = def.baseRadius + (def.maxRadius - def.baseRadius) * t
+	if self.currency and self.currency.hasUpgrade and self.currency:hasUpgrade(player, "LootMagnet") then
+		radius = Content.Shop.LootMagnet.radius
 	end
 	local untilTime = player:GetAttribute("MagnetUntil")
 	if untilTime and os.clock() < untilTime then
-		radius = math.max(radius, def.maxRadius)
+		local magnetRadius = player:GetAttribute("MagnetRadius") or 50
+		radius = math.max(radius, magnetRadius)
 	end
 	return radius
 end
@@ -91,32 +86,45 @@ function LuckyBlocksService:_startMagnetLoop()
 	end)
 end
 
-function LuckyBlocksService:_makeBlock(position, holdDuration)
+function LuckyBlocksService:_makeBlock(position, rarity, holdDuration)
 	local part = Instance.new("Part")
 	part.Name = "LuckyBlock"
-	part.Size = Vector3.new(5, 5, 5)
+	part.Size = Vector3.new(2, 2, 2)
 	part.Position = position
 	part.Anchored = true
 	part.CanCollide = true
-	part.Color = Color3.fromRGB(255, 230, 50)
+	part.Color = LootConfig.RarityColors[rarity] or Color3.fromRGB(255, 200, 80)
 	part.Material = Enum.Material.Neon
-	part:SetAttribute("Health", LootConfig.BlockHealth)
+	part:SetAttribute("Health", LootConfig.BlockHits[rarity] or 3)
+	part:SetAttribute("Rarity", rarity)
 
 	local billboard = Instance.new("BillboardGui")
-	billboard.Size = UDim2.new(0, 110, 0, 40)
+	billboard.Size = UDim2.new(0, 120, 0, 32)
 	billboard.MaxDistance = 30
 	billboard.AlwaysOnTop = true
-	billboard.StudsOffset = Vector3.new(0, 4, 0)
+	billboard.StudsOffset = Vector3.new(0, 3, 0)
 	billboard.Parent = part
 
 	local label = Instance.new("TextLabel")
 	label.Size = UDim2.new(1, 0, 1, 0)
 	label.BackgroundTransparency = 1
-	label.TextColor3 = Color3.new(1, 1, 1)
-	label.TextStrokeTransparency = 0.2
+	label.TextColor3 = part.Color
+	label.TextStrokeTransparency = 0.3
 	label.TextScaled = true
 	label.Text = "Lucky Block"
+	label.FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.SemiBold)
 	label.Parent = billboard
+
+	local glow = Instance.new("ParticleEmitter")
+	glow.Rate = 6
+	glow.Lifetime = NumberRange.new(0.6, 1)
+	glow.Speed = NumberRange.new(0.4, 0.8)
+	glow.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.6),
+		NumberSequenceKeypoint.new(1, 0),
+	})
+	glow.Color = ColorSequence.new(part.Color)
+	glow.Parent = part
 
 	local prompt = Instance.new("ProximityPrompt")
 	prompt.ActionText = "Break"
@@ -133,190 +141,178 @@ function LuckyBlocksService:_makeBlock(position, holdDuration)
 	return part
 end
 
+function LuckyBlocksService:_applySpeed(player, multiplier, duration)
+	local char = player.Character
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	if not hum then return end
+	local original = hum.WalkSpeed
+	hum.WalkSpeed = original * multiplier
+	task.delay(duration, function()
+		if hum and hum.Parent then
+			hum.WalkSpeed = original
+		end
+	end)
+end
+
+function LuckyBlocksService:_applyJump(player, multiplier, duration)
+	local char = player.Character
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	if not hum then return end
+	local original = hum.JumpPower
+	hum.JumpPower = original * multiplier
+	task.delay(duration, function()
+		if hum and hum.Parent then
+			hum.JumpPower = original
+		end
+	end)
+end
+
+function LuckyBlocksService:_applyMobility(player, speedMult, jumpMult, duration)
+	local char = player.Character
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	if not hum then return end
+	local originalSpeed = hum.WalkSpeed
+	local originalJump = hum.JumpPower
+	hum.WalkSpeed = originalSpeed * speedMult
+	hum.JumpPower = originalJump * jumpMult
+	task.delay(duration, function()
+		if hum and hum.Parent then
+			hum.WalkSpeed = originalSpeed
+			hum.JumpPower = originalJump
+		end
+	end)
+end
+
 function LuckyBlocksService:_onPrompt(player, part)
 	if not part or not part.Parent then return end
-	local health = part:GetAttribute("Health") or LootConfig.BlockHealth
-	health -= 1
+	local damage = 1
+	if self.currency and self.currency.hasUpgrade and self.currency:hasUpgrade(player, "BreakEfficiency") then
+		damage += Content.Shop.BreakEfficiency.reduceHits
+	end
+	local health = part:GetAttribute("Health") or 3
+	health -= damage
 	part:SetAttribute("Health", health)
 	if health > 0 then
 		return
 	end
 
-	local loot = chooseItem()
-	local coins = LootConfig.RarityCoins[loot.tier] or 50
-	self.currency:addCoins(player, coins)
-	self:_applyReward(player, loot)
+	local rarity = part:GetAttribute("Rarity") or rollRarity()
+	local loot = randomItem(rarity)
 
-	self.remotes.LuckyBlockFX:FireAllClients({position = part.Position, rarity = loot.tier})
-	self.remotes.Toast:FireClient(player, {message = rarityToast(loot.tier), rarity = loot.tier})
-	self.remotes.Toast:FireClient(player, {message = ("You got: %s"):format(loot.item), rarity = loot.tier})
+	local hasReroll = player:GetAttribute("RerollToken")
+	if hasReroll then
+		player:SetAttribute("RerollToken", nil)
+		loot = randomItem(rarity)
+	end
+
+	local doubleLoot = player:GetAttribute("DoubleLootTicket")
+	if doubleLoot then
+		player:SetAttribute("DoubleLootTicket", nil)
+	end
+
+	self.currency:recordBlockBreak(player, rarity)
+	self.currency:addCoins(player, Content.Economy.BlockBreakBonus)
+
+	self:_applyReward(player, loot, rarity, doubleLoot)
+
+	self.remotes.LuckyBlockFX:FireAllClients({position = part.Position, rarity = rarity})
+	self.remotes.Toast:FireClient(player, {message = ("You got: %s"):format(loot.name), rarity = rarity})
+
+	local pop = Instance.new("Sound")
+	pop.SoundId = "rbxassetid://138087017"
+	pop.Volume = 0.6
+	pop.Parent = part
+	pop:Play()
+	Debris:AddItem(pop, 2)
 
 	part:Destroy()
 end
 
-function LuckyBlocksService:_applyReward(player, loot)
-	local item = loot.item
-	local duration = loot.duration or 0
+function LuckyBlocksService:_applyReward(player, loot, rarity, doubleLoot)
+	local kind = loot.type
 
-	if item == "Coin Doubler" then
-		self.currency:setCoinMultiplier(player, 2, duration)
+	if kind == "Coins" then
+		local amount = loot.amount
+		if doubleLoot then
+			amount *= 2
+		end
+		self.currency:addCoins(player, amount)
 		return
 	end
 
-	if item == "Risky Overdrive" then
-		self.currency:setCoinMultiplier(player, 2, duration)
+	if kind == "DoubleLoot" then
+		player:SetAttribute("DoubleLootTicket", true)
 		return
 	end
 
-	if item == "Time Slow" then
+	if kind == "Speed" then
+		self:_applySpeed(player, loot.multiplier, loot.duration)
+		return
+	end
+
+	if kind == "Jump" then
+		self:_applyJump(player, loot.multiplier, loot.duration)
+		return
+	end
+
+	if kind == "Shield" then
+		player:SetAttribute("ShieldHP", loot.hits)
+		return
+	end
+
+	if kind == "Magnet" then
+		player:SetAttribute("MagnetUntil", os.clock() + loot.duration)
+		player:SetAttribute("MagnetRadius", loot.radius)
+		return
+	end
+
+	if kind == "Reroll" then
+		player:SetAttribute("RerollToken", true)
+		return
+	end
+
+	if kind == "TimeSlow" then
 		if self.tsunami then
-			self.tsunami:SetSlow(0.3, duration)
+			self.tsunami:SetSlow(loot.slow, loot.duration)
 		end
 		return
 	end
 
-	if item == "Aegis Shield" then
-		player:SetAttribute("ShieldHP", 300)
+	if kind == "CoinMultiplier" then
+		self.currency:setCoinMultiplier(player, loot.multiplier)
 		return
 	end
 
-	if item == "Immunity Window" then
-		player:SetAttribute("InvulnUntil", os.clock() + 5)
+	if kind == "Invuln" then
+		player:SetAttribute("InvulnUntil", os.clock() + loot.duration)
 		return
 	end
 
-	if item == "Revive Token" then
-		player:SetAttribute("ReviveToken", true)
+	if kind == "Mobility" then
+		self:_applyMobility(player, loot.speed, loot.jump, loot.duration)
 		return
 	end
 
-	if item == "Coin Magnet" then
-		local untilTime = os.clock() + duration
-		player:SetAttribute("MagnetUntil", untilTime)
-		task.delay(duration, function()
-			if player and player.Parent then
-				local current = player:GetAttribute("MagnetUntil")
-				if current and current <= os.clock() then
-					player:SetAttribute("MagnetUntil", nil)
-				end
-			end
-		end)
-		return
-	end
-
-	if item == "Radar Goggles" then
+	if kind == "TeamSpeed" then
+		local char = player.Character
+		local hrp = char and char:FindFirstChild("HumanoidRootPart")
+		if not hrp then return end
 		for _, other in ipairs(Players:GetPlayers()) do
-			if other.Character then
-				local highlight = Instance.new("Highlight")
-				highlight.FillColor = Color3.fromRGB(80, 200, 120)
-				highlight.OutlineColor = Color3.new(1, 1, 1)
-				highlight.Parent = other.Character
-				Debris:AddItem(highlight, duration)
+			local otherChar = other.Character
+			local otherHrp = otherChar and otherChar:FindFirstChild("HumanoidRootPart")
+			if otherHrp and (otherHrp.Position - hrp.Position).Magnitude <= loot.radius then
+				self:_applySpeed(other, loot.multiplier, loot.duration)
 			end
 		end
-		return
-	end
-
-	if item == "Party Popper" then
-		local char = player.Character
-		local hrp = char and char:FindFirstChild("HumanoidRootPart")
-		if hrp then
-			local emitter = Instance.new("ParticleEmitter")
-			emitter.Rate = 120
-			emitter.Lifetime = NumberRange.new(1, 1.5)
-			emitter.Speed = NumberRange.new(6, 10)
-			emitter.Parent = hrp
-			Debris:AddItem(emitter, 2)
-		end
-		return
-	end
-
-	if item == "Rubber Ducky" then
-		local char = player.Character
-		local hrp = char and char:FindFirstChild("HumanoidRootPart")
-		if hrp then
-			local duck = Instance.new("Part")
-			duck.Size = Vector3.new(2, 2, 2)
-			duck.Shape = Enum.PartType.Ball
-			duck.Color = Color3.fromRGB(255, 220, 60)
-			duck.Material = Enum.Material.Neon
-			duck.CanCollide = false
-			duck.CFrame = hrp.CFrame * CFrame.new(2, 2, 0)
-			local weld = Instance.new("WeldConstraint")
-			weld.Part0 = duck
-			weld.Part1 = hrp
-			weld.Parent = duck
-			duck.Parent = workspace
-			Debris:AddItem(duck, duration)
-		end
-		return
-	end
-
-	if item == "Neon Aura" then
-		if player.Character then
-			local highlight = Instance.new("Highlight")
-			highlight.FillColor = Color3.fromRGB(math.random(80, 255), math.random(80, 255), math.random(80, 255))
-			highlight.OutlineColor = Color3.new(1, 1, 1)
-			highlight.Parent = player.Character
-			Debris:AddItem(highlight, duration)
-		end
-		return
-	end
-
-	-- Movement buffs MVP
-	local char = player.Character
-	local hum = char and char:FindFirstChildOfClass("Humanoid")
-	if not hum then return end
-
-	if item == "Rocket Boots" then
-		local original = hum.JumpPower
-		hum.JumpPower = original * 1.8
-		task.delay(duration, function()
-			if hum and hum.Parent then
-				hum.JumpPower = original
-			end
-		end)
-		return
-	end
-
-	if item == "Dash Boots" or item == "Speed Ramp Boost" then
-		local original = hum.WalkSpeed
-		hum.WalkSpeed = original * 1.2
-		task.delay(duration, function()
-			if hum and hum.Parent then
-				hum.WalkSpeed = original
-			end
-		end)
-		return
-	end
-
-	if item == "Health Overshield" then
-		local originalMax = hum.MaxHealth
-		hum.MaxHealth = math.min(200, originalMax + 50)
-		hum.Health = math.min(hum.Health + 50, hum.MaxHealth)
-		task.delay(duration, function()
-			if hum and hum.Parent then
-				hum.MaxHealth = originalMax
-				hum.Health = math.min(hum.Health, hum.MaxHealth)
-			end
-		end)
-		return
-	end
-
-	if item == "Double Jump Extender" then
-		player:SetAttribute("ExtraJumps", 2)
-		task.delay(duration, function()
-			player:SetAttribute("ExtraJumps", nil)
-		end)
 		return
 	end
 end
 
-function LuckyBlocksService:SpawnBlocks(count, holdDuration)
+function LuckyBlocksService:SpawnBlocks(count)
 	self:Clear()
 	local attempts = 0
 	local spawned = 0
-	while spawned < count and attempts < count * 5 do
+	while spawned < count and attempts < count * 6 do
 		attempts += 1
 		local x = (math.random() - 0.5) * 200
 		local z = (math.random() - 0.5) * 200
@@ -324,10 +320,11 @@ function LuckyBlocksService:SpawnBlocks(count, holdDuration)
 		local result = workspace:Raycast(origin, Vector3.new(0, -300, 0))
 		local y = 10
 		if result then
-			y = result.Position.Y + 6
+			y = result.Position.Y + 4
 		end
 		local pos = Vector3.new(x, y, z)
-		local block = self:_makeBlock(pos, holdDuration)
+		local rarity = rollRarity()
+		local block = self:_makeBlock(pos, rarity, 0.3)
 		self.blocks[block] = true
 		spawned += 1
 	end
