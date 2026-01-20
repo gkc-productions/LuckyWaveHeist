@@ -17,6 +17,8 @@ local Remotes = require(remotesModule)
 
 local store = DataStoreService:GetDataStore("LuckyWaveHeist_v1")
 
+local MAX_LEVEL = 5
+
 local DEFAULT_UPGRADES = {
 	Magnet = 0,
 	Wallet = 0,
@@ -55,7 +57,7 @@ local function normalizeData(data)
 			for name, _ in pairs(DEFAULT_UPGRADES) do
 				local level = data.Upgrades[name]
 				if type(level) == "number" then
-					normalized.Upgrades[name] = math.max(0, math.floor(level))
+					normalized.Upgrades[name] = math.clamp(math.floor(level), 0, MAX_LEVEL)
 				end
 			end
 		end
@@ -125,6 +127,9 @@ function Economy.GetUpgradeCost(upgradeName, level)
 	if not base then
 		return nil
 	end
+	if level >= MAX_LEVEL then
+		return nil
+	end
 	return base * (2 ^ level)
 end
 
@@ -139,7 +144,15 @@ function Economy.PurchaseUpgrade(player, upgradeName)
 	end
 
 	local currentLevel = data.Upgrades[upgradeName] or 0
+	if currentLevel >= MAX_LEVEL then
+		return false, "MaxLevel"
+	end
+
 	local cost = Economy.GetUpgradeCost(upgradeName, currentLevel)
+	if not cost then
+		return false, "InvalidCost"
+	end
+
 	if data.Coins < cost then
 		return false, "NotEnoughCoins"
 	end

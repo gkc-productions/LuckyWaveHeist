@@ -26,23 +26,9 @@ local function getRemoteEvent(name)
 	return remote
 end
 
-local function getRemoteFunction(name)
-	local remote = remotesFolder:FindFirstChild(name)
-	if remote and not remote:IsA("RemoteFunction") then
-		remote:Destroy()
-		remote = nil
-	end
-	if not remote then
-		remote = Instance.new("RemoteFunction")
-		remote.Name = name
-		remote.Parent = remotesFolder
-	end
-	return remote
-end
-
 return {
 	RoundUpdate = getRemoteEvent("RoundUpdate"),
 	CoinsUpdate = getRemoteEvent("CoinsUpdate"),
 	Toast = getRemoteEvent("Toast"),
-	PurchaseUpgrade = getRemoteFunction("PurchaseUpgrade"),
+	PurchaseUpgrade = getRemoteEvent("PurchaseUpgrade"),
 }

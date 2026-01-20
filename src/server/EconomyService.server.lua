@@ -31,20 +31,23 @@ for _, player in ipairs(Players:GetPlayers()) do
 	Economy.Load(player)
 end
 
-Remotes.PurchaseUpgrade.OnServerInvoke = function(player, upgradeName)
+Remotes.PurchaseUpgrade.OnServerEvent:Connect(function(player, upgradeName)
 	if type(upgradeName) ~= "string" then
-		return false, "InvalidUpgrade"
+		Remotes.PurchaseUpgrade:FireClient(player, false, "InvalidUpgrade")
+		return
 	end
 
 	local normalized = string.upper(string.sub(upgradeName, 1, 1)) .. string.lower(string.sub(upgradeName, 2))
 	local success, result1, result2, result3 = Economy.PurchaseUpgrade(player, normalized)
 	if not success then
-		return false, result1
+		Remotes.PurchaseUpgrade:FireClient(player, false, result1)
+		return
 	end
 
 	Economy.Save(player)
-	return true, normalized, result1, result2, result3
-end
+	Remotes.PurchaseUpgrade:FireClient(player, true, normalized, result1, result2, result3)
+	Remotes.Toast:FireClient(player, normalized .. " upgraded!", "Uncommon")
+end)
 
 while true do
 	task.wait(60)

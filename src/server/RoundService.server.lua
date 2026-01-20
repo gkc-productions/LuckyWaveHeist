@@ -71,13 +71,34 @@ if not waterStartPlane then
 	warnOnce("WaterStartPlane", "[RoundService] Missing WaterStartPlane; created placeholder.")
 end
 
+local function getArenaLowestY()
+	local lowest = nil
+	for _, child in ipairs(arenaSpawns:GetChildren()) do
+		if child:IsA("BasePart") then
+			if not lowest or child.Position.Y < lowest then
+				lowest = child.Position.Y
+			end
+		end
+	end
+	return lowest
+end
+
 local function getTsunamiWaterPart()
 	local existing = workspace:FindFirstChild("TsunamiWater")
 	if existing then
 		if existing:IsA("BasePart") then
 			return existing
 		elseif existing:IsA("Model") then
-			return existing.PrimaryPart or existing:FindFirstChildWhichIsA("BasePart")
+			local basePart = existing.PrimaryPart or existing:FindFirstChildWhichIsA("BasePart")
+			if basePart then
+				return basePart
+			end
+			local created = Instance.new("Part")
+			created.Name = "Water"
+			created.Anchored = true
+			created.CanCollide = false
+			created.Parent = existing
+			return created
 		end
 	end
 
@@ -96,7 +117,12 @@ waterPart.Material = Enum.Material.Water
 waterPart.Transparency = 0.45
 waterPart.Color = Color3.fromRGB(50, 150, 170)
 
+local arenaLowestY = getArenaLowestY()
 local startSurfaceY = waterStartPlane.Position.Y - 50
+if arenaLowestY then
+	startSurfaceY = math.min(startSurfaceY, arenaLowestY - 80)
+end
+
 local waterSurfaceY = startSurfaceY
 waterPart.Position = Vector3.new(
 	waterStartPlane.Position.X,
@@ -217,7 +243,7 @@ local phases = {
 	{ state = "Intermission", duration = 5 },
 	{ state = "Wave", duration = 20, waveIndex = 1 },
 	{ state = "Wave", duration = 20, waveIndex = 2 },
-	{ state = "Wave", duration = 20, waveIndex = 3 },	
+	{ state = "Wave", duration = 20, waveIndex = 3 },
 	{ state = "Intermission", duration = 5 },
 }
 
@@ -278,7 +304,7 @@ while true do
 					local root = character and character:FindFirstChild("HumanoidRootPart")
 					local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
 					if root and humanoid and humanoid.Health > 0 then
-						if root.Position.Y < waterSurfaceY then
+						if root.Position.Y < (waterSurfaceY - 2) then
 							humanoid.Health = 0
 						end
 					end

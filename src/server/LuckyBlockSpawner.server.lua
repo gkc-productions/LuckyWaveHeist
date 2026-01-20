@@ -1,4 +1,3 @@
-local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local mapAlias = workspace:FindFirstChild("Map")
@@ -102,7 +101,7 @@ local function createBlock(marker)
 	createBillboard(part)
 
 	local prompt = Instance.new("ProximityPrompt")
-	prompt.ActionText = "Collect"
+	prompt.ActionText = "Break"
 	prompt.ObjectText = "Lucky Block"
 	prompt.HoldDuration = 0.2
 	prompt.RequiresLineOfSight = false
@@ -131,7 +130,7 @@ local function createBlock(marker)
 
 		part:SetAttribute("Collected", true)
 		Economy.AddCoins(player, 50)
-		Remotes.Toast:FireClient(player, "Lucky Block +50", "Common")
+		Remotes.Toast:FireClient(player, "+50", "Common")
 
 		activeByMarker[marker.Name] = nil
 		activeBlocks[part] = nil
