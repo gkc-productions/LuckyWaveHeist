@@ -1,5 +1,6 @@
 local DataStoreService = game:GetService("DataStoreService")
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Content = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("ContentPack"))
@@ -9,11 +10,12 @@ CurrencyService.__index = CurrencyService
 
 local STORE_NAME = "LWH_Currency_v3"
 local AUTOSAVE_INTERVAL = 60
+local STUDIO_MODE = RunService:IsStudio() -- Disable DataStore in Studio
 
 function CurrencyService.new(remotes)
 	local self = setmetatable({}, CurrencyService)
 	self.remotes = remotes
-	self.store = DataStoreService:GetDataStore(STORE_NAME)
+	self.store = not STUDIO_MODE and DataStoreService:GetDataStore(STORE_NAME) or nil
 	self.coins = {}
 	self.upgrades = {}
 	self.lastPrint = {}
@@ -57,6 +59,13 @@ function CurrencyService:_send(player)
 end
 
 function CurrencyService:_load(player)
+	if not self.store then
+		-- Studio mode: start with fresh data
+		self.coins[player] = 0
+		self.upgrades[player] = {}
+		self:_send(player)
+		return
+	end
 	local ok, data = pcall(function()
 		return self.store:GetAsync("p_" .. player.UserId)
 	end)
@@ -71,7 +80,7 @@ function CurrencyService:_load(player)
 end
 
 function CurrencyService:_save(player)
-	if not player or not player.Parent then return end
+	if not player or not player.Parent or not self.store then return end
 	local data = {
 		coins = self.coins[player] or 0,
 		upgrades = self.upgrades[player] or {},
