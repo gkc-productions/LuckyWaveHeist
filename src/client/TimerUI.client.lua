@@ -16,10 +16,37 @@ local fxEvt = Remotes.LuckyBlockFX
 local player = Players.LocalPlayer
 local guiParent = player:WaitForChild("PlayerGui")
 
+local duplicateFound = false
+for _, child in ipairs(guiParent:GetChildren()) do
+	if child:IsA("ScreenGui") and (child.Name == "RoundHUD" or child.Name == "MainHUD" or child.Name == "HUD") then
+		child:Destroy()
+		duplicateFound = true
+	end
+end
+if duplicateFound then
+	print("[HUD] duplicate prevented")
+end
+
 local gui = Instance.new("ScreenGui")
-gui.Name = "RoundHUD"
+gui.Name = "HUD"
+gui.IgnoreGuiInset = true
 gui.ResetOnSpawn = false
 gui.Parent = guiParent
+
+local safeArea = Instance.new("Frame")
+safeArea.Name = "SafeArea"
+safeArea.AnchorPoint = Vector2.new(0, 0)
+safeArea.Position = UDim2.new(0, 12, 0, 12)
+safeArea.Size = UDim2.new(1, -24, 1, -24)
+safeArea.BackgroundTransparency = 1
+safeArea.Parent = gui
+
+local padding = Instance.new("UIPadding")
+padding.PaddingTop = UDim.new(0, 48)
+padding.PaddingLeft = UDim.new(0, 0)
+padding.PaddingRight = UDim.new(0, 0)
+padding.PaddingBottom = UDim.new(0, 0)
+padding.Parent = safeArea
 
 local theme = {
 	Navy = Color3.fromRGB(11, 16, 32),
@@ -31,66 +58,124 @@ local theme = {
 	Soft = Color3.fromRGB(170, 190, 210),
 }
 
-local font = Enum.Font.GothamBold
+local font = Enum.Font.Gotham
 
 local coinsCard = Instance.new("Frame")
-coinsCard.Size = UDim2.new(0, 260, 0, 54)
-coinsCard.Position = UDim2.new(0, 16, 0, 60)
+coinsCard.Name = "CoinsCard"
+coinsCard.Size = UDim2.new(0, 240, 0, 60)
+coinsCard.Position = UDim2.new(0, 0, 0, 0)
 coinsCard.BackgroundColor3 = theme.Navy
-coinsCard.Parent = gui
+coinsCard.BackgroundTransparency = 0.25
+coinsCard.Parent = safeArea
 
 local coinsCorner = Instance.new("UICorner")
-coinsCorner.CornerRadius = UDim.new(0, 10)
+coinsCorner.CornerRadius = UDim.new(0, 12)
 coinsCorner.Parent = coinsCard
 
 local coinsStroke = Instance.new("UIStroke")
 coinsStroke.Color = theme.Teal
-coinsStroke.Thickness = 1.5
-coinsStroke.Transparency = 0.2
+coinsStroke.Thickness = 1.2
+coinsStroke.Transparency = 0.65
 coinsStroke.Parent = coinsCard
 
 local coinsLabel = Instance.new("TextLabel")
 coinsLabel.Size = UDim2.new(0.45, 0, 1, 0)
-coinsLabel.Position = UDim2.new(0, 12, 0, 0)
+coinsLabel.Position = UDim2.new(0, 14, 0, 0)
 coinsLabel.BackgroundTransparency = 1
 coinsLabel.Text = "COINS"
 coinsLabel.TextColor3 = theme.Soft
 coinsLabel.Font = Enum.Font.GothamMedium
-coinsLabel.TextScaled = true
+coinsLabel.TextSize = 14
 coinsLabel.TextXAlignment = Enum.TextXAlignment.Left
 coinsLabel.Parent = coinsCard
 
 local coinsValue = Instance.new("TextLabel")
-coinsValue.Size = UDim2.new(0.55, -12, 1, 0)
+coinsValue.Size = UDim2.new(0.55, -14, 1, 0)
 coinsValue.Position = UDim2.new(0.45, 0, 0, 0)
 coinsValue.BackgroundTransparency = 1
 coinsValue.Text = "0"
 coinsValue.TextColor3 = theme.Yellow
-coinsValue.Font = font
-coinsValue.TextScaled = true
+coinsValue.Font = Enum.Font.GothamBold
+coinsValue.TextSize = 24
 coinsValue.TextXAlignment = Enum.TextXAlignment.Right
 coinsValue.Parent = coinsCard
 
+local roundBanner = Instance.new("Frame")
+roundBanner.Name = "RoundBanner"
+roundBanner.AnchorPoint = Vector2.new(0.5, 0)
+roundBanner.Position = UDim2.new(0.5, 0, 0, 0)
+roundBanner.Size = UDim2.new(0, 520, 0, 72)
+roundBanner.BackgroundColor3 = theme.Navy
+roundBanner.BackgroundTransparency = 0.25
+roundBanner.Parent = safeArea
+
+local roundCorner = Instance.new("UICorner")
+roundCorner.CornerRadius = UDim.new(0, 12)
+roundCorner.Parent = roundBanner
+
+local roundStroke = Instance.new("UIStroke")
+roundStroke.Color = theme.Teal
+roundStroke.Thickness = 1.2
+roundStroke.Transparency = 0.65
+roundStroke.Parent = roundBanner
+
+local roundWave = Instance.new("TextLabel")
+roundWave.Size = UDim2.new(1, -24, 0, 24)
+roundWave.Position = UDim2.new(0, 12, 0, 6)
+roundWave.BackgroundTransparency = 1
+roundWave.Text = "WAVE 1/3"
+roundWave.TextColor3 = theme.Yellow
+roundWave.Font = Enum.Font.GothamBold
+roundWave.TextSize = 20
+roundWave.TextXAlignment = Enum.TextXAlignment.Left
+roundWave.Parent = roundBanner
+
+local roundStatus = Instance.new("TextLabel")
+roundStatus.Size = UDim2.new(1, -24, 0, 20)
+roundStatus.Position = UDim2.new(0, 12, 0, 30)
+roundStatus.BackgroundTransparency = 1
+roundStatus.Text = "Waiting for players..."
+roundStatus.TextColor3 = theme.White
+roundStatus.Font = Enum.Font.GothamMedium
+roundStatus.TextSize = 16
+roundStatus.TextXAlignment = Enum.TextXAlignment.Left
+roundStatus.Parent = roundBanner
+
+local roundMeta = Instance.new("TextLabel")
+roundMeta.Size = UDim2.new(1, -24, 0, 18)
+roundMeta.Position = UDim2.new(0, 12, 0, 50)
+roundMeta.BackgroundTransparency = 1
+roundMeta.Text = "0:00 | Alive: 0"
+roundMeta.TextColor3 = theme.Soft
+roundMeta.Font = Enum.Font.GothamMedium
+roundMeta.TextSize = 14
+roundMeta.TextXAlignment = Enum.TextXAlignment.Left
+roundMeta.Parent = roundBanner
+
 local shopButton = Instance.new("TextButton")
-shopButton.Size = UDim2.new(0, 120, 0, 36)
-shopButton.Position = UDim2.new(0, 16, 0, 124)
-shopButton.Text = "Shop"
+shopButton.Name = "ShopButton"
+shopButton.Size = UDim2.new(0, 120, 0, 44)
+shopButton.Position = UDim2.new(0, 0, 1, -120)
 shopButton.BackgroundColor3 = theme.Teal
+shopButton.BackgroundTransparency = 0.1
+shopButton.Text = "Shop"
 shopButton.TextColor3 = theme.Navy
 shopButton.Font = Enum.Font.GothamBold
-shopButton.TextScaled = true
-shopButton.Parent = gui
+shopButton.TextSize = 16
+shopButton.Parent = safeArea
 
 local shopCorner = Instance.new("UICorner")
-shopCorner.CornerRadius = UDim.new(0, 10)
+shopCorner.CornerRadius = UDim.new(0, 12)
 shopCorner.Parent = shopButton
 
 local shopFrame = Instance.new("Frame")
+shopFrame.Name = "ShopPanel"
 shopFrame.Size = UDim2.new(0, 320, 0, 280)
-shopFrame.Position = UDim2.new(0, 16, 0, 170)
+shopFrame.Position = UDim2.new(0, 0, 1, -420)
 shopFrame.BackgroundColor3 = theme.Steel
+shopFrame.BackgroundTransparency = 0.2
 shopFrame.Visible = false
-shopFrame.Parent = gui
+shopFrame.Parent = safeArea
 
 local shopFrameCorner = Instance.new("UICorner")
 shopFrameCorner.CornerRadius = UDim.new(0, 12)
@@ -101,8 +186,8 @@ shopTitle.Size = UDim2.new(1, 0, 0, 30)
 shopTitle.BackgroundTransparency = 1
 shopTitle.Text = "Upgrades"
 shopTitle.TextColor3 = theme.White
-shopTitle.Font = font
-shopTitle.TextScaled = true
+shopTitle.Font = Enum.Font.GothamBold
+shopTitle.TextSize = 18
 shopTitle.Parent = shopFrame
 
 local function makeButton(y)
@@ -110,12 +195,13 @@ local function makeButton(y)
 	btn.Size = UDim2.new(1, -20, 0, 32)
 	btn.Position = UDim2.new(0, 10, 0, y)
 	btn.BackgroundColor3 = theme.Navy
+	btn.BackgroundTransparency = 0.15
 	btn.TextColor3 = theme.White
 	btn.Font = Enum.Font.GothamMedium
-	btn.TextScaled = true
+	btn.TextSize = 14
 	btn.Parent = shopFrame
 	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 8)
+	corner.CornerRadius = UDim.new(0, 10)
 	corner.Parent = btn
 	return btn
 end
@@ -129,60 +215,14 @@ local buttons = {
 	DailyReroll = makeButton(220),
 }
 
-local roundBanner = Instance.new("Frame")
-roundBanner.Size = UDim2.new(0, 540, 0, 64)
-roundBanner.Position = UDim2.new(0.5, -270, 0, 12)
-roundBanner.BackgroundColor3 = theme.Navy
-roundBanner.Parent = gui
-
-local roundCorner = Instance.new("UICorner")
-roundCorner.CornerRadius = UDim.new(0, 12)
-roundCorner.Parent = roundBanner
-
-local roundStroke = Instance.new("UIStroke")
-roundStroke.Color = theme.Teal
-roundStroke.Thickness = 1.5
-roundStroke.Transparency = 0.2
-roundStroke.Parent = roundBanner
-
-local roundWave = Instance.new("TextLabel")
-roundWave.Size = UDim2.new(1, -20, 0, 18)
-roundWave.Position = UDim2.new(0, 10, 0, 4)
-roundWave.BackgroundTransparency = 1
-roundWave.Text = "WAVE 1"
-roundWave.TextColor3 = theme.Yellow
-roundWave.Font = font
-roundWave.TextScaled = true
-roundWave.TextXAlignment = Enum.TextXAlignment.Left
-roundWave.Parent = roundBanner
-
-local roundStatus = Instance.new("TextLabel")
-roundStatus.Size = UDim2.new(1, -20, 0, 18)
-roundStatus.Position = UDim2.new(0, 10, 0, 22)
-roundStatus.BackgroundTransparency = 1
-roundStatus.Text = "Waiting for players..."
-roundStatus.TextColor3 = theme.White
-roundStatus.Font = Enum.Font.GothamMedium
-roundStatus.TextScaled = true
-roundStatus.TextXAlignment = Enum.TextXAlignment.Left
-roundStatus.Parent = roundBanner
-
-local roundMeta = Instance.new("TextLabel")
-roundMeta.Size = UDim2.new(1, -20, 0, 18)
-roundMeta.Position = UDim2.new(0, 10, 0, 40)
-roundMeta.BackgroundTransparency = 1
-roundMeta.Text = "0:00 | Alive: 0"
-roundMeta.TextColor3 = theme.Soft
-roundMeta.Font = Enum.Font.GothamMedium
-roundMeta.TextScaled = true
-roundMeta.TextXAlignment = Enum.TextXAlignment.Left
-roundMeta.Parent = roundBanner
-
 local waterBar = Instance.new("Frame")
-waterBar.Size = UDim2.new(0, 420, 0, 18)
-waterBar.Position = UDim2.new(0.5, -210, 1, -40)
+waterBar.Name = "WaterProgress"
+waterBar.AnchorPoint = Vector2.new(0.5, 1)
+waterBar.Position = UDim2.new(0.5, 0, 1, -28)
+waterBar.Size = UDim2.new(0, 520, 0, 18)
 waterBar.BackgroundColor3 = theme.Steel
-waterBar.Parent = gui
+waterBar.BackgroundTransparency = 0.2
+waterBar.Parent = safeArea
 
 local waterCorner = Instance.new("UICorner")
 waterCorner.CornerRadius = UDim.new(0, 9)
@@ -191,12 +231,13 @@ waterCorner.Parent = waterBar
 local waterStroke = Instance.new("UIStroke")
 waterStroke.Color = theme.Teal
 waterStroke.Thickness = 1
-waterStroke.Transparency = 0.35
+waterStroke.Transparency = 0.65
 waterStroke.Parent = waterBar
 
 local waterFill = Instance.new("Frame")
 waterFill.Size = UDim2.new(0, 0, 1, 0)
 waterFill.BackgroundColor3 = theme.Teal
+waterFill.BackgroundTransparency = 0.05
 waterFill.Parent = waterBar
 
 local waterFillCorner = Instance.new("UICorner")
@@ -204,34 +245,37 @@ waterFillCorner.CornerRadius = UDim.new(0, 9)
 waterFillCorner.Parent = waterFill
 
 local toastContainer = Instance.new("Frame")
+toastContainer.Name = "ToastContainer"
 toastContainer.Size = UDim2.new(0, 280, 0, 240)
-toastContainer.Position = UDim2.new(1, -296, 0, 70)
+toastContainer.Position = UDim2.new(1, -280, 0, 0)
 toastContainer.BackgroundTransparency = 1
-toastContainer.Parent = gui
+toastContainer.Parent = safeArea
 
 local tutorialFrame = Instance.new("TextLabel")
+tutorialFrame.Name = "Tutorial"
 tutorialFrame.Size = UDim2.new(0.8, 0, 0, 40)
 tutorialFrame.Position = UDim2.new(0.1, 0, 0.82, 0)
 tutorialFrame.BackgroundColor3 = theme.Navy
 tutorialFrame.TextColor3 = theme.White
 tutorialFrame.Font = Enum.Font.GothamMedium
-tutorialFrame.TextScaled = true
+tutorialFrame.TextSize = 16
 tutorialFrame.BackgroundTransparency = 0.1
 tutorialFrame.Visible = false
-tutorialFrame.Parent = gui
+tutorialFrame.Parent = safeArea
 
 local tutorialCorner = Instance.new("UICorner")
 tutorialCorner.CornerRadius = UDim.new(0, 10)
 tutorialCorner.Parent = tutorialFrame
 
 local warningFlash = Instance.new("Frame")
+warningFlash.Name = "WarningFlash"
 warningFlash.Size = UDim2.new(1, 0, 1, 0)
 warningFlash.BackgroundColor3 = theme.Red
 warningFlash.BackgroundTransparency = 1
 warningFlash.ZIndex = 5
 warningFlash.Parent = gui
 
-print("[HUD] init")
+print("[HUD] initialized")
 
 local currentCoins = 0
 local upgradeLevels = {}
@@ -278,7 +322,7 @@ local toasts = {}
 
 local function layoutToasts()
 	for i, toast in ipairs(toasts) do
-		local target = UDim2.new(0, 0, 0, (i - 1) * 62)
+		local target = UDim2.new(0, 0, 0, (i - 1) * 60)
 		TweenService:Create(toast, TweenInfo.new(0.2), {Position = target}):Play()
 	end
 end
@@ -286,9 +330,9 @@ end
 local function pushToast(message, rarity)
 	local card = Instance.new("Frame")
 	card.Size = UDim2.new(1, 0, 0, 56)
-	card.Position = UDim2.new(0, 40, 0, 0)
+	card.Position = UDim2.new(0, 24, 0, 0)
 	card.BackgroundColor3 = theme.Navy
-	card.BackgroundTransparency = 0.1
+	card.BackgroundTransparency = 0.2
 	card.Parent = toastContainer
 
 	local corner = Instance.new("UICorner")
@@ -297,8 +341,8 @@ local function pushToast(message, rarity)
 
 	local stroke = Instance.new("UIStroke")
 	stroke.Color = toastColor(rarity)
-	stroke.Thickness = 1.5
-	stroke.Transparency = 0.2
+	stroke.Thickness = 1.2
+	stroke.Transparency = 0.6
 	stroke.Parent = card
 
 	local label = Instance.new("TextLabel")
@@ -307,8 +351,8 @@ local function pushToast(message, rarity)
 	label.BackgroundTransparency = 1
 	label.Text = message
 	label.TextColor3 = toastColor(rarity)
-	label.Font = Enum.Font.GothamSemibold
-	label.TextScaled = true
+	label.Font = Enum.Font.GothamBold
+	label.TextSize = 14
 	label.TextXAlignment = Enum.TextXAlignment.Left
 	label.Parent = card
 
@@ -385,7 +429,7 @@ roundEvt.OnClientEvent:Connect(function(p)
 		header = waveCopy(wave)
 	end
 
-	roundWave.Text = string.format("WAVE %d / %d", wave, total)
+	roundWave.Text = string.format("WAVE %d/%d", wave, total)
 	roundStatus.Text = header
 	roundMeta.Text = string.format("%s | Alive: %d", fmt(timeLeft), alive)
 
