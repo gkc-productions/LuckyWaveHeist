@@ -1,4 +1,7 @@
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Content = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("ContentPack"))
 
 local WaterRise = {}
 WaterRise.__index = WaterRise
@@ -19,6 +22,8 @@ function WaterRise.new()
 	self.water.CanCollide = false
 	self.water.Material = Enum.Material.Water
 	self.water.Transparency = 0.45
+	self.water.Size = Vector3.new(600, 40, 600)
+	self.water.Position = Vector3.new(self.water.Position.X, Content.Tuning.WaterStartY, self.water.Position.Z)
 
 	self.startCFrame = self.water.CFrame
 	self.startSize = self.water.Size

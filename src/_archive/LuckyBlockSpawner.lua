@@ -171,7 +171,6 @@ function LuckyBlockSpawner:_onPrompt(player, part)
 		part:Destroy()
 	end)
 end
-end
 
 function LuckyBlockSpawner:_giveTool(player, name)
 	local backpack = player:FindFirstChildOfClass("Backpack")

@@ -1,213 +1,297 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Remotes = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Remotes"))
-local Content = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("ContentPack"))
-local WaterRise = require(script.Parent:WaitForChild("WaterRise"))
-local TsunamiService = require(script.Parent:WaitForChild("TsunamiService"))
-local LuckyBlocksService = require(script.Parent:WaitForChild("LuckyBlocksService"))
-local CurrencyService = require(script.Parent:WaitForChild("CurrencyService"))
-
-local tuning = Content.Tuning
-
-local spawns = workspace:WaitForChild("Spawns")
-local lobbyFolder = spawns:WaitForChild("Lobby")
-local arenaFolder = spawns:WaitForChild("Arena")
-
-local water = WaterRise.new()
-local currency = CurrencyService.new(Remotes)
-local tsunami = TsunamiService.new(Remotes)
-local luckyBlocks = LuckyBlocksService.new(Remotes, currency, tsunami)
-
-local roundActive = false
-
-local function pickSpawn(folder)
-	local kids = folder:GetChildren()
-	if #kids == 0 then return nil end
-	local p = kids[math.random(1, #kids)]
-	return p:IsA("BasePart") and p or nil
+local mapAlias = workspace:FindFirstChild("Map")
+if not mapAlias then
+	mapAlias = Instance.new("ObjectValue")
+	mapAlias.Name = "Map"
+	mapAlias.Parent = workspace
+	mapAlias.Value = workspace:FindFirstChild("LuckyWaveHeist_Map")
+	warn("[RoundService] Missing Map alias; created placeholder.")
 end
 
-local function setSpawnShield(player)
-	player:SetAttribute("SpawnShieldUntil", os.clock() + 3)
-	local char = player.Character
-	if char then
-		local highlight = Instance.new("Highlight")
-		highlight.FillColor = Color3.fromRGB(120, 200, 255)
-		highlight.OutlineColor = Color3.new(1, 1, 1)
-		highlight.Parent = char
-		task.delay(3, function()
-			if highlight and highlight.Parent then
-				highlight:Destroy()
-			end
-		end)
+local Map = workspace:WaitForChild("Map").Value
+
+local sharedFolder = ReplicatedStorage:FindFirstChild("Shared")
+if not sharedFolder then
+	sharedFolder = Instance.new("Folder")
+	sharedFolder.Name = "Shared"
+	sharedFolder.Parent = ReplicatedStorage
+end
+
+local remotesModule = sharedFolder:FindFirstChild("Remotes")
+if not remotesModule then
+	error("Remotes module missing in ReplicatedStorage.Shared")
+end
+
+local Remotes = require(remotesModule)
+local Economy = require(script.Parent:WaitForChild("Economy"))
+
+local warned = {}
+local function warnOnce(key, message)
+	if warned[key] then
+		return
+	end
+	warned[key] = true
+	warn(message)
+end
+
+local function ensureFolder(parent, name, warnKey)
+	local folder = parent:FindFirstChild(name)
+	if folder and not folder:IsA("Folder") then
+		folder:Destroy()
+		folder = nil
+	end
+	if not folder then
+		folder = Instance.new("Folder")
+		folder.Name = name
+		folder.Parent = parent
+		warnOnce(warnKey or name, "[RoundService] Missing " .. name .. "; created placeholder.")
+	end
+	return folder
+end
+
+local spawnsFolder = ensureFolder(workspace, "Spawns", "Spawns")
+local lobbySpawns = ensureFolder(spawnsFolder, "Lobby", "Spawns.Lobby")
+local arenaSpawns = ensureFolder(spawnsFolder, "Arena", "Spawns.Arena")
+
+local waterBounds = ensureFolder(workspace, "WaterBounds", "WaterBounds")
+local waterStartPlane = waterBounds:FindFirstChild("WaterStartPlane")
+if waterStartPlane and not waterStartPlane:IsA("BasePart") then
+	waterStartPlane:Destroy()
+	waterStartPlane = nil
+end
+if not waterStartPlane then
+	waterStartPlane = Instance.new("Part")
+	waterStartPlane.Name = "WaterStartPlane"
+	waterStartPlane.Anchored = true
+	waterStartPlane.Size = Vector3.new(300, 1, 300)
+	waterStartPlane.Position = Vector3.new(0, 0, 0)
+	waterStartPlane.Parent = waterBounds
+	warnOnce("WaterStartPlane", "[RoundService] Missing WaterStartPlane; created placeholder.")
+end
+
+local function getTsunamiWaterPart()
+	local existing = workspace:FindFirstChild("TsunamiWater")
+	if existing then
+		if existing:IsA("BasePart") then
+			return existing
+		elseif existing:IsA("Model") then
+			return existing.PrimaryPart or existing:FindFirstChildWhichIsA("BasePart")
+		end
+	end
+
+	local water = Instance.new("Part")
+	water.Name = "TsunamiWater"
+	water.Anchored = true
+	water.CanCollide = false
+	water.Parent = workspace
+	return water
+end
+
+local waterPart = getTsunamiWaterPart()
+local waterSize = Vector3.new(waterStartPlane.Size.X, 40, waterStartPlane.Size.Z)
+waterPart.Size = waterSize
+waterPart.Material = Enum.Material.Water
+waterPart.Transparency = 0.45
+waterPart.Color = Color3.fromRGB(50, 150, 170)
+
+local startSurfaceY = waterStartPlane.Position.Y - 50
+local waterSurfaceY = startSurfaceY
+waterPart.Position = Vector3.new(
+	waterStartPlane.Position.X,
+	waterSurfaceY - (waterSize.Y / 2),
+	waterStartPlane.Position.Z
+)
+
+local waveRates = { 1, 2, 3 }
+
+local function getHumanoid(player)
+	local character = player.Character
+	if not character then
+		return nil
+	end
+	return character:FindFirstChildWhichIsA("Humanoid")
+end
+
+local function isAlive(player)
+	local humanoid = getHumanoid(player)
+	return humanoid ~= nil and humanoid.Health > 0
+end
+
+local function countAlive()
+	local alive = 0
+	for _, player in ipairs(Players:GetPlayers()) do
+		if isAlive(player) then
+			alive += 1
+		end
+	end
+	return alive
+end
+
+local function getSpawnLocation(folder)
+	local candidates = {}
+	for _, child in ipairs(folder:GetChildren()) do
+		if child:IsA("SpawnLocation") or child:IsA("BasePart") then
+			table.insert(candidates, child)
+		end
+	end
+	if #candidates == 0 then
+		return nil
+	end
+	return candidates[math.random(1, #candidates)]
+end
+
+local function teleportPlayer(player, folder)
+	local spawn = getSpawnLocation(folder)
+	if not spawn then
+		return
+	end
+
+	local character = player.Character
+	if not character then
+		return
+	end
+
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if not root then
+		return
+	end
+
+	character:PivotTo(CFrame.new(spawn.Position + Vector3.new(0, 3, 0)))
+end
+
+local function applySpeed(player, isWave)
+	local humanoid = getHumanoid(player)
+	if not humanoid then
+		return
+	end
+
+	local speedLevel = Economy.GetUpgradeLevel(player, "Speed")
+	local baseSpeed = 16
+	local bonus = isWave and (speedLevel * 2) or 0
+	humanoid.WalkSpeed = baseSpeed + bonus
+end
+
+local function playWarningSiren()
+	if not Map then
+		return
+	end
+	local siren = Map:FindFirstChild("WarningSiren", true)
+	if siren and siren:IsA("Sound") then
+		siren:Play()
 	end
 end
 
-local function teleportPlayer(plr, folder)
-	local char = plr.Character
-	if not char then return end
-	local hrp = char:FindFirstChild("HumanoidRootPart")
-	if not hrp then return end
-	local spawnPart = pickSpawn(folder)
-	if not spawnPart then return end
-	hrp.CFrame = spawnPart.CFrame + Vector3.new(0, 5, 0)
+local currentState = "Lobby"
+local currentWaveIndex = 0
+local currentTimeLeft = 0
+
+local function broadcastRound()
+	Remotes.RoundUpdate:FireAllClients(
+		currentState,
+		currentWaveIndex,
+		currentTimeLeft,
+		countAlive()
+	)
 end
 
-local function teleportAll(folder)
-	for _, plr in ipairs(Players:GetPlayers()) do
-		teleportPlayer(plr, folder)
-		if folder == arenaFolder then
-			setSpawnShield(plr)
-		end
-	end
-end
+Players.PlayerAdded:Connect(function(player)
+	Remotes.RoundUpdate:FireClient(
+		player,
+		currentState,
+		currentWaveIndex,
+		currentTimeLeft,
+		countAlive()
+	)
+end)
 
-local function alivePlayers()
-	local list = {}
-	for _, plr in ipairs(Players:GetPlayers()) do
-		local c = plr.Character
-		local hum = c and c:FindFirstChildOfClass("Humanoid")
-		if hum and hum.Health > 0 then
-			table.insert(list, plr)
-		end
-	end
-	return list
-end
-
-local function aliveCount()
-	return #alivePlayers()
-end
-
-local function broadcast(state, timeLeft, waveNumber)
-	Remotes.RoundUpdate:FireAllClients({
-		state = state,
-		timeLeft = timeLeft,
-		alive = aliveCount(),
-		wave = waveNumber,
-		totalWaves = #tuning.WaveDurations,
-	})
-end
-
-Players.PlayerAdded:Connect(function(plr)
-	currency:onPlayerAdded(plr)
-	plr.CharacterAdded:Connect(function()
-		task.wait(0.1)
-		if roundActive then
-			teleportPlayer(plr, arenaFolder)
-			setSpawnShield(plr)
-		else
-			teleportPlayer(plr, lobbyFolder)
-		end
+Players.PlayerAdded:Connect(function(player)
+	player.CharacterAdded:Connect(function()
+		applySpeed(player, currentState == "Wave")
 	end)
 end)
 
-Players.PlayerRemoving:Connect(function(plr)
-	currency:onPlayerRemoving(plr)
-end)
+local phases = {
+	{ state = "Lobby", duration = 10 },
+	{ state = "Intermission", duration = 5 },
+	{ state = "Wave", duration = 20, waveIndex = 1 },
+	{ state = "Wave", duration = 20, waveIndex = 2 },
+	{ state = "Wave", duration = 20, waveIndex = 3 },	
+	{ state = "Intermission", duration = 5 },
+}
 
-Remotes.PurchaseUpgrade.OnServerEvent:Connect(function(player, payload)
-	if typeof(payload) ~= "table" then return end
-	local kind = payload.kind
-	if kind then
-		currency:purchase(player, kind)
-	end
-end)
-
-local function intermission()
-	roundActive = false
-	local timeLeft = tuning.IntermissionSeconds
-	teleportAll(lobbyFolder)
-	while timeLeft > 0 do
-		broadcast("Intermission", timeLeft, 1)
-		task.wait(1)
-		timeLeft -= 1
-	end
-end
-
-local function blockCountForWave(waveNumber)
-	if waveNumber == 1 then
-		return math.random(15, 20)
-	elseif waveNumber == 2 then
-		return math.random(10, 15)
-	end
-	return math.random(5, 8)
-end
-
-local function runWave(waveNumber)
-	local duration = tuning.WaveDurations[waveNumber]
-	local riseRate = tuning.WaveRiseRates[waveNumber]
-
-	local warning = tuning.WarningSeconds
-	tsunami:Warn()
-	while warning > 0 do
-		broadcast("Warning", warning, waveNumber)
-		task.wait(1)
-		warning -= 1
-	end
-
-	roundActive = true
-	teleportAll(arenaFolder)
-	currency:resetRoundStats(Players:GetPlayers())
-	currency:applyWalletBonus(Players:GetPlayers())
-	luckyBlocks:SpawnBlocks(blockCountForWave(waveNumber))
-	currency:startPerSecondLoop(function()
-		return roundActive
-	end)
-
-	tsunami:Reset()
-	water:Reset(CFrame.new(0, tuning.WaterStartY, 0))
-	tsunami:StartWave(duration, riseRate)
-
-	local waveMessage = Content.RoundText.Wave1
-	if waveNumber == 2 then
-		waveMessage = Content.RoundText.Wave2
-	elseif waveNumber == 3 then
-		waveMessage = Content.RoundText.Wave3
-	end
-	Remotes.Toast:FireAllClients({message = waveMessage})
-	print(('[Round] start wave %d'):format(waveNumber))
-
-	local timeLeft = duration
-	while timeLeft > 0 and roundActive do
-		if aliveCount() == 0 then
-			roundActive = false
-			break
-		end
-		broadcast("Wave", timeLeft, waveNumber)
-		task.wait(1)
-		timeLeft -= 1
-	end
-
-	roundActive = false
-	currency:stopPerSecondLoop()
-	currency:clearTempMultipliers()
-	tsunami:Stop()
-	luckyBlocks:Clear()
-
-	if aliveCount() > 0 then
-		currency:awardWaveBonus(alivePlayers(), waveNumber)
-		return true
-	end
-
-	Remotes.Toast:FireAllClients({message = Content.RoundText.AllEliminated})
-	return false
-end
-
-math.randomseed(os.clock() * 1000000)
+print("[RoundService] ready")
 
 while true do
-	intermission()
-	local success = true
-	for waveNumber = 1, #tuning.WaveDurations do
-		if not runWave(waveNumber) then
-			success = false
-			break
-		end
-		task.wait(2)
-	end
+	for _, phase in ipairs(phases) do
+		currentState = phase.state
+		currentWaveIndex = phase.waveIndex or 0
 
-	if success then
-		Remotes.Toast:FireAllClients({message = Content.RoundText.Victory})
+		if currentState == "Wave" then
+			waterSurfaceY = startSurfaceY
+			waterPart.Position = Vector3.new(
+				waterStartPlane.Position.X,
+				waterSurfaceY - (waterSize.Y / 2),
+				waterStartPlane.Position.Z
+			)
+			playWarningSiren()
+			for _, player in ipairs(Players:GetPlayers()) do
+				Economy.ApplyWalletBonus(player)
+				applySpeed(player, true)
+				teleportPlayer(player, arenaSpawns)
+			end
+		else
+			for _, player in ipairs(Players:GetPlayers()) do
+				applySpeed(player, false)
+				teleportPlayer(player, lobbySpawns)
+			end
+		end
+
+		local phaseEnd = os.clock() + phase.duration
+		local nextBroadcast = 0
+		local lastTick = os.clock()
+
+		while true do
+			local now = os.clock()
+			local remaining = phaseEnd - now
+			if remaining <= 0 then
+				currentTimeLeft = 0
+				broadcastRound()
+				break
+			end
+
+			currentTimeLeft = math.max(0, math.ceil(remaining))
+
+			if currentState == "Wave" then
+				local dt = now - lastTick
+				local rate = waveRates[currentWaveIndex] or waveRates[#waveRates]
+				waterSurfaceY += rate * dt
+				waterPart.Position = Vector3.new(
+					waterStartPlane.Position.X,
+					waterSurfaceY - (waterSize.Y / 2),
+					waterStartPlane.Position.Z
+				)
+
+				for _, player in ipairs(Players:GetPlayers()) do
+					local character = player.Character
+					local root = character and character:FindFirstChild("HumanoidRootPart")
+					local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
+					if root and humanoid and humanoid.Health > 0 then
+						if root.Position.Y < waterSurfaceY then
+							humanoid.Health = 0
+						end
+					end
+				end
+			end
+
+			if now >= nextBroadcast then
+				broadcastRound()
+				nextBroadcast = now + 0.2
+			end
+
+			lastTick = now
+			task.wait(0.05)
+		end
 	end
 end

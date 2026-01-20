@@ -1,31 +1,48 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
--- Canonical remotes folder at ReplicatedStorage.Remotes (capital R)
 local remotesFolder = ReplicatedStorage:FindFirstChild("Remotes")
+if remotesFolder and not remotesFolder:IsA("Folder") then
+	remotesFolder:Destroy()
+	remotesFolder = nil
+end
+
 if not remotesFolder then
 	remotesFolder = Instance.new("Folder")
 	remotesFolder.Name = "Remotes"
 	remotesFolder.Parent = ReplicatedStorage
-	print("[Remotes] Created ReplicatedStorage.Remotes")
 end
 
-local function getOrCreateRemote(name: string)
+local function getRemoteEvent(name)
 	local remote = remotesFolder:FindFirstChild(name)
+	if remote and not remote:IsA("RemoteEvent") then
+		remote:Destroy()
+		remote = nil
+	end
 	if not remote then
 		remote = Instance.new("RemoteEvent")
 		remote.Name = name
 		remote.Parent = remotesFolder
-		print(('[Remotes] Created RemoteEvent %s'):format(name))
+	end
+	return remote
+end
+
+local function getRemoteFunction(name)
+	local remote = remotesFolder:FindFirstChild(name)
+	if remote and not remote:IsA("RemoteFunction") then
+		remote:Destroy()
+		remote = nil
+	end
+	if not remote then
+		remote = Instance.new("RemoteFunction")
+		remote.Name = name
+		remote.Parent = remotesFolder
 	end
 	return remote
 end
 
 return {
-	RemotesFolder = remotesFolder,
-	RoundUpdate = getOrCreateRemote("RoundUpdate"),
-	Toast = getOrCreateRemote("Toast"),
-	CurrencyUpdate = getOrCreateRemote("CurrencyUpdate"),
-	Tutorial = getOrCreateRemote("Tutorial"),
-	PurchaseUpgrade = getOrCreateRemote("PurchaseUpgrade"),
-	LuckyBlockFX = getOrCreateRemote("LuckyBlockFX"),
+	RoundUpdate = getRemoteEvent("RoundUpdate"),
+	CoinsUpdate = getRemoteEvent("CoinsUpdate"),
+	Toast = getRemoteEvent("Toast"),
+	PurchaseUpgrade = getRemoteFunction("PurchaseUpgrade"),
 }

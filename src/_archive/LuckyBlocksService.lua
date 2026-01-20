@@ -131,6 +131,7 @@ function LuckyBlocksService:_makeBlock(position, rarity, holdDuration)
 	prompt.ObjectText = "Lucky Block"
 	prompt.HoldDuration = holdDuration
 	prompt.MaxActivationDistance = 14
+	prompt.RequiresLineOfSight = false
 	prompt.Parent = part
 
 	prompt.Triggered:Connect(function(player)
