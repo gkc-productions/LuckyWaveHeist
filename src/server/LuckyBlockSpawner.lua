@@ -158,8 +158,19 @@ function LuckyBlockSpawner:_onPrompt(player, part)
 
 	self.remotes.LuckyBlockFX:FireAllClients({position = part.Position, rarity = loot.rarity})
 	self.remotes.Toast:FireClient(player, {message = ("You got: %s"):format(loot.name), rarity = loot.rarity})
-
-	part:Destroy()
+	
+	-- Shrink animation before destroy
+	local tweenInfo = TweenInfo.new(
+		0.2,
+		Enum.EasingStyle.Quad,
+		Enum.EasingDirection.In
+	)
+	local tween = TweenService:Create(part, tweenInfo, {Size = Vector3.new(0.1, 0.1, 0.1), Transparency = 1})
+	tween:Play()
+	tween.Completed:Connect(function()
+		part:Destroy()
+	end)
+end
 end
 
 function LuckyBlockSpawner:_giveTool(player, name)
